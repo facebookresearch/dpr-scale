@@ -1,0 +1,42 @@
+defaults:
+  - config
+  - override trainer: slurm
+
+task:
+  shared_model: false
+  in_batch_eval: true
+  optim:
+    lr: 5e-5
+  warmup_steps: 100
+
+datamodule:
+  train_path: /checkpoint/kushall/data/dpr_scale/ubuntu/train.jsonl
+  val_path: /checkpoint/kushall/data/dpr_scale/ubuntu/valid.jsonl
+  test_path: /checkpoint/kushall/data/dpr_scale/ubuntu/valid.jsonl
+  batch_size: 16
+  val_batch_size: 1
+  test_batch_size: 1
+  num_negative: 0
+  num_val_negative: 9
+  num_test_negative: 9
+  drop_last: false
+  use_title: false
+
+trainer:
+  gpus: 8
+  num_nodes: 1
+  max_epochs: 5
+  num_sanity_val_steps: 0
+  log_every_n_steps: 10
+  gradient_clip_val: 2.0
+  precision: 16
+  accelerator: ddp
+  plugins: ddp_sharded
+
+checkpoint_callback:
+  monitor: valid_accuracy@1
+
+hydra:
+  launcher:
+    partition: devlab,learnlab,learnfair
+    timeout_min: 4320

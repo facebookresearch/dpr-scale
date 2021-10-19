@@ -1,0 +1,6 @@
+# @package _group_
+_target_: "madgrad.MADGRAD"
+lr: 1.0e-03
+eps: 1.0e-06
+weight_decay: 0
+momentum: 0.9

@@ -1,0 +1,5 @@
+# @package _group_
+_target_: dpr_scale.models.hf_model.HFEncoder
+model_path: bert-base-uncased
+projection_dim: Null
+dropout: 0.1

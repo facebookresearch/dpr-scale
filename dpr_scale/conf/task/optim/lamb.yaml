@@ -1,0 +1,8 @@
+# @package _group_
+_target_: "torch_optimizer.Lamb"
+lr: 1.0e-05
+betas:
+- 0.9
+- 0.999
+eps: 1.0e-08
+weight_decay: 0

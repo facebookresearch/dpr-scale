@@ -1,0 +1,10 @@
+# @package _group_
+_target_: dpr_scale.datamodule.dpr.DenseRetrieverJsonlDataModule
+train_path: "/private/home/barlaso/repos/DPR/data/retriever/nq-train.jsonl"
+val_path: "/private/home/barlaso/repos/DPR/data/retriever/nq-dev.jsonl"
+test_path: "/private/home/barlaso/repos/DPR/data/retriever/nq-dev.jsonl"
+batch_size: 2
+num_negative: 2
+num_val_negative: 2
+drop_last: False
+use_title: True

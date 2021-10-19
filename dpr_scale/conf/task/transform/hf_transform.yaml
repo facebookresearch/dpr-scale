@@ -1,0 +1,4 @@
+# @package _group_
+_target_: dpr_scale.transforms.hf_transform.HFTransform
+model_path: ${task.model.model_path}
+max_seq_len: 256

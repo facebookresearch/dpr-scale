@@ -1,0 +1,38 @@
+defaults:
+  - config
+  - override trainer: slurm
+
+task:
+  shared_model: false
+  in_batch_eval: false
+  optim:
+    lr: 2e-5
+  warmup_steps: 10000
+  transform:
+    max_seq_len: 512
+
+datamodule:
+  train_path: /private/home/barlaso/data/msmarco/preprocessed/orcas_train.jsonl
+  val_path: /private/home/barlaso/data/msmarco/preprocessed/orcas_dev.jsonl
+  test_path: /private/home/barlaso/data/msmarco/preprocessed/orcas_dev.jsonl
+  batch_size: 32
+  num_negative: 1
+  num_val_negative: 1
+  num_test_negative: 1
+  val_batch_size: 2
+  test_batch_size: 2
+  drop_last: false
+  use_title: true
+  num_workers: 2
+
+trainer:
+  gpus: 8
+  num_nodes: 8
+  max_steps: 1000
+  num_sanity_val_steps: 0
+  log_every_n_steps: 1000
+  gradient_clip_val: 2.0
+  accumulate_grad_batches: 1
+  precision: 16
+  plugins: ddp_sharded
+  accelerator: ddp

@@ -1,0 +1,6 @@
+defaults:
+  - nq
+  - datamodule/generate
+
+datamodule:
+  test_path: /private/home/vladk/data/wikipedia/wiki_passages/psgs_w100.tsv
