@@ -58,14 +58,13 @@ The sections below provide links to datasets and pretrained models, as well as, 
 Download the dataset from [here](https://dl.fbaipublicfiles.com/dpr_scale/paq/PAQ.dpr.train.neg1.jsonl.zip)
 
 ## Conversational Datasets
-You can download the dataset from the respective tables, or prepare it by following the instructions.
+You can download the dataset from the respective tables.
 ### Reddit
 File | Download Link
 |---|---
 train | [download](https://dl.fbaipublicfiles.com/dpr_scale/reddit/train.200M.jsonl)
 dev | [download](https://dl.fbaipublicfiles.com/dpr_scale/reddit/dev.jsonl)
 
-<span style="color:red">@Barlas had prepared this dataset. Instructions to be added by him.</span>
 
 ### ConvAI2
 File | Download Link
@@ -73,7 +72,6 @@ File | Download Link
 train | [download](https://dl.fbaipublicfiles.com/dpr_scale/convai2/train.jsonl)
 dev | [download](https://dl.fbaipublicfiles.com/dpr_scale/convai2/valid.jsonl)
 
-<span style="color:red">@Barlas had prepared this dataset. Instructions to be added by him.</span>
 
 ### DSTC7
 File | Download Link

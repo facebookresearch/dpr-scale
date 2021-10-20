@@ -1,4 +1,4 @@
-# (c) Facebook, Inc. and its affiliates. Confidential and proprietary.
+# Copyright (c) Facebook, Inc. and its affiliates.
 
 from dataclasses import dataclass, field
 from typing import List, Any
