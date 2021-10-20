@@ -1,3 +1,4 @@
+# (c) Facebook, Inc. and its affiliates. Confidential and proprietary.
 """
 This module computes evaluation metrics for MSMARCO dataset on the ranking task.
 Command line:

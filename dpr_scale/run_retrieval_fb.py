@@ -1,3 +1,5 @@
+# (c) Facebook, Inc. and its affiliates. Confidential and proprietary.
+
 import argparse
 import logging
 import os

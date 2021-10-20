@@ -1,3 +1,4 @@
+# (c) Facebook, Inc. and its affiliates. Confidential and proprietary.
 #
 # Pyserini: Python interface to the Anserini IR toolkit built on Lucene
 #

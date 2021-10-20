@@ -236,3 +236,6 @@ PYTHONPATH=${DPR_ROOT} python ${DPR_ROOT}/dpr_scale/main.py -m \
     task.model.model_path=$MODEL \
     datamodule.batch_size=${BSZ} > ${EXP_DIR}/logs/log.out 2> ${EXP_DIR}/logs/log.err &
 ```
+
+## License
+dpr-scale is CC-BY-NC 4.0 licensed as of now.

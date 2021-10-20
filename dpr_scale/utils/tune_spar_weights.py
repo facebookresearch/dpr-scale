@@ -1,3 +1,5 @@
+# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+
 # For faster experimentation on different weights when combining two dense models
 # We implement the "re-ranking" scheme: Take top 100 from either model, get their scores,
 # and re-rank the top 100 with various weights
