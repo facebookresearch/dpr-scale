@@ -163,3 +163,6 @@ PYTHONPATH=.:$PYTHONPATH python spar/spar_retrieval.py \
     --output_dir ./spar/outputs/spar_odqa_dpr_multiset_plus_wiki_lambda_bm25 \
     --weights 0.7 1.43 0.9 1.25 0.7
 ```
+
+# License
+SPAR is CC-BY-NC 4.0 licensed as of now.
