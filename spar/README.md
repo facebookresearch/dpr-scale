@@ -148,6 +148,20 @@ For `DPR-multiset` and `Wiki BM25 Λ`, the selected weights are:
 * WebQ: 1.25
 * TREC: 0.7
 
+For MS MARCO, the selected weights are:
+* SPAR (RocketQA + Marco BM25 Λ): 0.1
+* SPAR (RocketQA + Marco UniCOIL Λ): 0.5
+
+For BEIR experiments, the best weights are tuned on MS MARCO dev:
+
+* SPAR (Contriever + Marco BM25 Λ): 0.006
+* SPAR (Contriever + Marco UniCOIL Λ): 0.0333
+
+* SPAR (GTR + BM25 Λ): 0.001
+* SPAR (GTR + UniCOIL Λ): 0.007
+
+(For certain MS MARCO models, much smaller weights are needed. In the standard weight tuning process, we select the weights from 0.1 to 10. But if the best weight lies on either end of the spectrum, we'll continue the searching by lowering (or increasing) the weights by 100x. For instance, if weight=0.1 gave the best results for a model, we'll do another grid search on [0.001, 0.1].)
+
 ### Run SPAR Retrieval
 
 After tuning the concatenation weights, run the following script to perform SPAR retrieval with the selected weights on all five ODQA datasets:
