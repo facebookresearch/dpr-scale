@@ -10,12 +10,15 @@ Xilun Chen, Kushal Lakhotia, Barlas Oğuz, Anchit Gupta, Patrick Lewis, Stan Pes
 
 
 ## Pre-trained Checkpoints
-Pretrained Model | Corpus | Teacher | Architecture | Download Link
-|---|---|---|---|---
-Wiki BM25 Λ | Wikipedia | BM25 | BERT-base | [download](https://dl.fbaipublicfiles.com/SPAR/checkpoints/wiki_lambda_bm25_bert_base.ckpt)
-PAQ BM25 Λ | PAQ | BM25 | BERT-base | [download](https://dl.fbaipublicfiles.com/SPAR/checkpoints/paq_lambda_bm25_bert_base.ckpt)
-MARCO BM25 Λ | MS MARCO | BM25 | BERT-base | [download](https://dl.fbaipublicfiles.com/SPAR/checkpoints/marco_lambda_bm25_bert_base.ckpt)
-MARCO UniCOIL Λ | MS MARCO | UniCOIL | BERT-base | [download](https://dl.fbaipublicfiles.com/SPAR/checkpoints/marco_lambda_unicoil_bert_base.ckpt)
+
+**News**: The pre-trained checkpoints are now available on Huggingface! See [here](https://huggingface.co/facebook/spar-wiki-bm25-lexmodel-query-encoder) for how to get the models using the Huggingface `transformers` library.
+
+Pretrained Model | Corpus | Teacher | Architecture | Download Link | Huggingface Path: Query Encoder | Huggingface Path: Context Encoder
+|---|---|---|---|---|---|---
+Wiki BM25 Λ | Wikipedia | BM25 | BERT-base | [download](https://dl.fbaipublicfiles.com/SPAR/checkpoints/wiki_lambda_bm25_bert_base.ckpt) | facebook/spar-wiki-bm25-lexmodel-query-encoder | facebook/spar-wiki-bm25-lexmodel-context-encoder
+PAQ BM25 Λ | PAQ | BM25 | BERT-base | [download](https://dl.fbaipublicfiles.com/SPAR/checkpoints/paq_lambda_bm25_bert_base.ckpt) | facebook/spar-wiki-bm25-lexmodel-query-encoder | facebook/spar-wiki-bm25-lexmodel-context-encoder
+MARCO BM25 Λ | MS MARCO | BM25 | BERT-base | [download](https://dl.fbaipublicfiles.com/SPAR/checkpoints/marco_lambda_bm25_bert_base.ckpt) | facebook/spar-marco-bm25-lexmodel-query-encoder | facebook/spar-marco-bm25-lexmodel-context-encoder
+MARCO UniCOIL Λ | MS MARCO | UniCOIL | BERT-base | [download](https://dl.fbaipublicfiles.com/SPAR/checkpoints/marco_lambda_unicoil_bert_base.ckpt) | facebook/spar-marco-unicoil-lexmodel-query-encoder | facebook/spar-marco-unicoil-lexmodel-context-encoder
 
 For convenience, we also provide a checkpoint to the [Multiset DPR model](https://dl.fbaipublicfiles.com/SPAR/checkpoints/dpr_multiset_bert_base.ckpt), which is the same model as [this one](https://dl.fbaipublicfiles.com/dpr/checkpoint/retriver/multiset/hf_bert_base.cp) but converted to the dpr-scale format.
 
