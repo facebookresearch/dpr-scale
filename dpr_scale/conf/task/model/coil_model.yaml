@@ -1,0 +1,6 @@
+# @package _group_
+_target_: dpr_scale.models.citadel_models.coil_model.COILEncoder
+model_path: bert-base-uncased
+projection_dim: 128
+cls_projection_dim: 128
+dropout: 0.1

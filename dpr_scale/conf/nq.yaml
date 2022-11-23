@@ -28,5 +28,4 @@ trainer:
   log_every_n_steps: 10
   gradient_clip_val: 2.0
   precision: 16
-  accelerator: ddp
-  plugins: ddp_sharded
+  strategy: ddp_sharded

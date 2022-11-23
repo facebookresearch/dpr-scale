@@ -26,7 +26,7 @@ class GenerateEmbeddingsTask(DenseRetrieverTask):
 
     def forward(self, contexts_ids):
         # encode contexts
-        contexts_repr = self.context_encoder(contexts_ids)  # ctx_cnt x d
+        contexts_repr = self.encode_contexts(contexts_ids)  # ctx_cnt x d
         return contexts_repr
 
     def _eval_step(self, batch, batch_idx):
@@ -67,7 +67,7 @@ class GenerateQueryEmbeddingsTask(GenerateEmbeddingsTask):
 
     def forward(self, query_ids):
         # encode questions
-        query_repr = self.query_encoder(query_ids)  # q_cnt x d
+        query_repr = self.encode_queries(query_ids)  # q_cnt x d
         return query_repr
 
     def _eval_step(self, batch, batch_idx):
@@ -75,10 +75,10 @@ class GenerateQueryEmbeddingsTask(GenerateEmbeddingsTask):
         q_repr = self(q_ids)
         return q_repr.cpu()
 
-    def test_epoch_end(self, contexts_repr):
-        contexts_repr = torch.cat(contexts_repr, dim=0)
+    def test_epoch_end(self, queries_repr):
+        queries_repr = torch.cat(queries_repr, dim=0)
         out_file = self.query_emb_output_path
         pathlib.Path(self.query_emb_output_path).parent.mkdir(parents=True, exist_ok=True)
-        print(f"\nWriting tensor of size {contexts_repr.size()} to {out_file}")
+        print(f"\nWriting tensor of size {queries_repr.size()} to {out_file}")
         with PathManager.open(out_file, mode="wb") as f:
-            pickle.dump(contexts_repr, f, protocol=4)
+            pickle.dump(queries_repr, f, protocol=4)

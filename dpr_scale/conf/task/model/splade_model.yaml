@@ -1,0 +1,4 @@
+# @package _group_
+_target_: dpr_scale.models.citadel_models.splade_model.SPLADEEncoder
+model_path: bert-base-uncased
+dropout: 0.1

@@ -34,5 +34,4 @@ trainer:
   gradient_clip_val: 2.0
   accumulate_grad_batches: 1
   precision: 16
-  plugins: ddp_sharded
-  accelerator: ddp
+  strategy: ddp_sharded

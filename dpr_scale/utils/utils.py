@@ -114,5 +114,48 @@ class ScriptEncoder(torch.nn.Module):
         self.cpu()
 
     def forward(self, texts: List[str]) -> torch.Tensor:
-        model_inputs = self.transform(texts)["token_ids"]
+        batch = self.transform(texts)
+        return self.encode(batch["token_ids"])
+
+    def encode(self, model_inputs: torch.Tensor) -> torch.Tensor:
         return self.encoder(model_inputs)
+
+
+class ScriptMultiEncoder(torch.nn.Module):
+    # For scripting an weighted ensemble of RobertaEncoder like classes
+    def __init__(self, transform, encoders, quantize=False, weights=None):
+        super().__init__()
+        self.transform = WrapTransform(transform)
+        self.encoders = torch.nn.ModuleList()
+        self.linear = torch.nn.Linear(len(encoders), 1, bias=False, device='cpu')
+        if weights is None:
+            self.linear.weight.data = torch.ones(
+                len(encoders), 1, device="cpu"
+            )  # n_enc * 1, by default all ones
+        else:
+            assert len(weights) == len(encoders)
+            self.linear.weight.data = torch.Tensor([weights], device="cpu").T
+        for encoder in encoders:
+            enc = copy.deepcopy(encoder).cpu()
+            if quantize:
+                enc = torch.quantization.quantize_dynamic(
+                    enc, {torch.nn.Linear}, dtype=torch.qint8
+                )
+            self.encoders.append(enc)
+        if quantize:
+            self.linear = torch.quantization.quantize_dynamic(
+                self.linear, {torch.nn.Linear}, dtype=torch.qint8
+            )
+        self.cpu()
+
+    def forward(self, texts: List[str]) -> torch.Tensor:
+        batch = self.transform(texts)
+        return self.encode(batch["token_ids"])
+
+    def encode(self, model_inputs: torch.Tensor) -> torch.Tensor:
+        embeddings_list: List[torch.Tensor] = []
+        for i, encoder in enumerate(self.encoders):
+            embeddings_list.append(
+                self.linear.weight.data[i] * encoder(model_inputs)
+            )  # weighted concatenation
+        return torch.cat(embeddings_list, dim=1)  # n_enc * d

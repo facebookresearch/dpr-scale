@@ -17,18 +17,20 @@ class HFTransform(nn.Module):
         return_tensors: bool = True,
     ):
         super().__init__()
-        local_model_path = PathManager.get_local_path(model_path, recursive=True)
+        # remove recursive argument which is not supported now
+        local_model_path = PathManager.get_local_path(model_path)
         self.tokenizer = AutoTokenizer.from_pretrained(local_model_path)
         self.sep_token = self.tokenizer.sep_token
         self.max_seq_len = max_seq_len
         self.add_special_tokens = add_special_tokens
         self.return_tensors = return_tensors
 
-    def forward(self, texts):
+    def forward(self, texts, text_pair=None, padding=True):
         return self.tokenizer(
             texts,
+            text_pair,
             return_tensors="pt" if self.return_tensors else None,
-            padding=True,
+            padding=padding,
             truncation=True,
             max_length=self.max_seq_len,
             add_special_tokens=self.add_special_tokens,

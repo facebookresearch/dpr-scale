@@ -4,6 +4,7 @@ import hydra
 from dpr_scale.conf.config import MainConfig
 
 from omegaconf import OmegaConf
+from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.trainer import Trainer
 
 
@@ -27,7 +28,8 @@ def main(cfg: MainConfig):
     transform = hydra.utils.instantiate(cfg.task.transform)
     datamodule = hydra.utils.instantiate(cfg.datamodule, transform=transform)
     checkpoint_callback = hydra.utils.instantiate(cfg.checkpoint_callback)
-    trainer = Trainer(**cfg.trainer, callbacks=[checkpoint_callback])
+    lr_monitor = LearningRateMonitor(logging_interval='step')
+    trainer = Trainer(**cfg.trainer, callbacks=[checkpoint_callback, lr_monitor])
 
     if cfg.test_only:
         ckpt_path = cfg.task.pretrained_checkpoint_path

@@ -1,0 +1,32 @@
+defaults:
+  - config
+  - override trainer: slurm_aws
+  - override task/optim: adamw
+
+task:
+  shared_model: false
+  in_batch_eval: false
+  optim:
+    lr: 2e-5
+  warmup_steps: 3000
+
+datamodule:
+  train_path: /fsx/mhli/msmarco_passage/msmarco_exp_train.jsonl
+  val_path: /fsx/mhli/msmarco_passage/msmarco_exp_dev.jsonl
+  test_path: /fsx/mhli/msmarco_passage/msmarco_exp_dev.jsonl
+  batch_size: 16
+  num_negative: 1
+  num_val_negative: 1
+  num_test_negative: 50
+  drop_last: false
+  use_title: true
+
+trainer:
+  gpus: 8
+  num_nodes: 1
+  max_epochs: 20
+  num_sanity_val_steps: 0
+  log_every_n_steps: 10
+  gradient_clip_val: 2.0
+  precision: 16
+  strategy: ddp

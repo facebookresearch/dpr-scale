@@ -9,7 +9,7 @@ import faiss
 import glob
 import pickle
 import pathlib
-from dpr_scale.datamodule.dpr import CSVDataset
+from dpr_scale.datamodule.dpr import CSVDataset, QueryCSVDataset
 from dpr_scale.utils.utils import PathManager
 try:
     # dummy import to make Manifold paths happy
@@ -41,7 +41,7 @@ def get_parser():
         help="if left empty, will use <ctx_embeddings_dir>/query_reps.pkl"
     )
     parser.add_argument(
-        "--questions_jsonl_path",
+        "--questions_tsv_path",
         type=str,
         default="",
     )
@@ -134,9 +134,8 @@ def main(args, logger):
     scores, indexes = index.search(q_repr.numpy(), args.topk)
 
     # load questions file
-    print(f"Loading questions file {args.questions_jsonl_path}")
-    with PathManager.open(args.questions_jsonl_path) as f:
-        questions = [json.loads(line) for line in f]
+    print(f"Loading questions file {args.questions_tsv_path}")
+    questions = QueryCSVDataset(args.questions_tsv_path)
 
     # load all passages:
     print(f"Loading passages from {args.passages_tsv_path}")

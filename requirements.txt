@@ -1,9 +1,11 @@
-hydra-core==1.1.0.dev3
-hydra-submitit-launcher==1.0.1
-pyyaml
-pytorch-lightning==1.2.4
-fairscale==0.3.2
+hydra-core==1.1.0
+hydra-submitit-launcher==1.2.0
+torch==1.8.2
+torch-scatter==2.0.8
+pytorch-lightning==1.6.4
+fairscale==0.4.6
 transformers==3.4.0
-ujson
 sentence_splitter>=1.4
+pyyaml
 tqdm
+ujson

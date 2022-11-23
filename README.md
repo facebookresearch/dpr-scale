@@ -1,239 +1,388 @@
-Scalable implementation of dense retrieval.
+# CITADEL:  Conditional Token Interaction via Dynamic Lexical Routing for Efficient and Effective Multi-Vector Retrieval
 
-
-## Training on cluster
-
-By default it trains locally:
-
+This page describes how to implement [CITADEL](https://arxiv.org/abs/2211.10411) with dpr-scale.
 ```
-PYTHONPATH=.:$PYTHONPATH python dpr_scale/main.py trainer.gpus=1
+@article{li2022citadel,
+title = {CITADEL: Conditional Token Interaction via Dynamic Lexical Routing for Efficient and Effective Multi-Vector Retrieval},
+author = {Li, Minghan and Lin, Sheng-Chieh and Oguz, Barlas and Ghoshal, Asish and Lin, Jimmy and Mehdad, Yashar and Yih, Wen-tau and Chen, Xilun},
+doi = {10.48550/ARXIV.2211.10411},
+publisher = {arXiv},
+year = {2022}
+url = {https://arxiv.org/abs/2211.10411},
+}
 ```
-
-### SLURM Training
-
-To train the model on SLURM, run:
-
+In the following, we describe how to train, encode, rerank, and retrieve with CITADEL on MS MARCO passage-v1 and TREC DeepLearning 2019/2020.
+## Dependencies
+First, make sure you have [Anaconda3](https://docs.anaconda.com/anaconda/install/index.html) installed.
+Then use conda to create a new environment and activate it:
 ```
-PYTHONPATH=.:$PYTHONPATH python dpr_scale/main.py -m trainer=slurm trainer.num_nodes=2 trainer.gpus=2
+conda create -n dpr-scale python=3.8
+conda activate dpr-scale
 ```
-
-### Reproduce DPR on 8 gpus
+Now let's install the packages. First, follow the instructions [here](https://pytorch.org/get-started/locally/) to install PyTorch on your machine.
+Then install faiss:
 ```
-PYTHONPATH=.:$PYTHONPATH python dpr_scale/main.py -m --config-name nq.yaml  +hydra.launcher.name=dpr_stl_nq_reproduce
+conda install -c conda-forge faiss-gpu
 ```
-
-### Generate embeddings on Wikipedia
+Finally install the packages in `requirement.txt`. Remember to comment out the packages in the .txt file that you've already installed to avoid conflicts.
 ```
-PYTHONPATH=.:$PYTHONPATH python dpr_scale/generate_embeddings.py -m --config-name nq.yaml datamodule=generate datamodule.test_path=psgs_w100.tsv +task.ctx_embeddings_dir=<CTX_EMBEDDINGS_DIR> +task.checkpoint_path=<CHECKPOINT_PATH>
-```
-
-### Get retrieval results
-Currently this runs on 1 GPU.  Use CTX_EMBEDDINGS_DIR from above.
-```
-PYTHONPATH=.:$PYTHONPATH python dpr_scale/run_retrieval.py --config-name nq.yaml trainer=gpu_1_host trainer.gpus=1 +task.output_path=<PATH_TO_OUTPUT_JSON> +task.ctx_embeddings_dir=<CTX_EMBEDDINGS_DIR> +task.checkpoint_path=<CHECKPOINT_PATH> +task.passages=psgs_w100.tsv datamodule.test_path=<PATH_TO_QUERIES_JSONL>
+pip install -r requirement.txt
 ```
 
-### Generate query embeddings
-Alternatively, query embedding generation and retrieval can be separated.
-After query embeddings are generated using the following command, the `run_retrieval_fb.py` or `run_retrieval_multiset.py` script can be used to perform retrieval.
+## MS MARCO Passage-v1
+### Data Prep
+First, download the data from the [MS MARCO](https://microsoft.github.io/msmarco/) official website. Make sure to download and decompress the Collection, Qrels Train, Qrels Dev, and Queries.
+
+Then, download and decompress the training data `train.jsonl.gz` from [Tevatron](https://huggingface.co/datasets/Tevatron/msmarco-passage/tree/main). We then split the training data into train and dev:
 ```
-PYTHONPATH=.:$PYTHONPATH python dpr_scale/generate_query_embeddings.py -m --config-name nq.yaml trainer.gpus=1 datamodule.test_path=<PATH_TO_QUERIES_JSONL> +task.ctx_embeddings_dir=<CTX_EMBEDDINGS_DIR> +task.checkpoint_path=<CHECKPOINT_PATH> +task.query_emb_output_path=<OUTPUT_TO_QUERY_EMB>
+PYTHONPATH=. python dpr_scale/utils/prep_msmarco_exp.py --doc_path <train file path> --output_dir_path <output dir path>
+```
+By default we use 1\% training data as the validation set.
+
+### Pre-trained Model Checkpoints
+
+#### Checkpoints
+- [CITADEL](https://dl.fbaipublicfiles.com/citadel/checkpoints/citadel/citadel/checkpoint_best.ckpt)
+
+- [CITADEL+](https://dl.fbaipublicfiles.com/citadel/checkpoints/citadel/citadel_plus/checkpoint_best.ckpt)
+
+#### Embeddings and Retrieval Index
+- [CITADEL MS MARCO Index](https://dl.fbaipublicfiles.com/citadel/index/citadel_msmarco_index.tar.xz)
+
+- [CITADEL+ MS MARCO Index](https://dl.fbaipublicfiles.com/citadel/index/citadel_plus_msmarco_index.tar.xz)
+
+
+### Training
+To train the model, run:
+
+```
+PYTHONPATH=.:$PYTHONPATH python dpr_scale/main.py -m \
+--config-name msmarco_aws.yaml \
+task=multivec task/model=citadel_model \
+task.in_batch_eval=True datamodule.num_test_negative=10 trainer.max_epochs=10 \
+task.model.tok_projection_dim=32 task.model.cls_projection_dim=128 \
+task.shared_model=True +task.cross_batch=False +task.in_batch=True \
++task.add_cls=True \
++task.query_topk=1 +task.context_topk=5 \
++task.teacher_coef=0 +task.tau=1 \
++task.anneal_factor=0 \
++task.query_router_marg_load_loss_coef=1e-2 +task.context_router_marg_load_loss_coef=1e-2 \
++task.query_expert_load_loss_coef=0 +task.context_expert_load_loss_coef=1e-4 \
+datamodule.batch_size=8 datamodule.num_negative=7 trainer.num_nodes=4 trainer.gpus=8
 ```
 
-### Get evaluation metrics for a given JSON output file
+The default number of routing keys are `query_topk=1` and `context_topk=5` for query and passage, respectively. `router_marg_load_loss_coef` is to control the load balancing loss, while the `query_expert_load_loss_coef` is to control the L1 regularization. `anneal_factor` is to control the ramping up speed of the regularization coef, which we set to 0 in this case.
+
+### Reranking
+To quickly examine the quality of our trained model without the hassle of indexing, we could use the model to rerank the retrieved top-1000 candidates of BM25 and evaluate the results:
 ```
-python dpr_scale/eval_dpr.py --retrieval <PATH_TO_OUTPUT_JSON> --topk 1 5 10 20 50 100 
+PATH_TO_OUTPUT_DIR=your_path_to_output_dir
+CHECKPOINT_PATH=your_path_to_ckpt
+DATA_PATH=/data_path/msmarco_passage/msmarco_corpus.tsv
+PATH_TO_QUERIES_TSV=/data_path/msmarco_passage/dev_small.tsv
+PATH_TO_TREC_TSV=/data_path/msmarco_passage/bm25.trec
+
+PYTHONPATH=.:$PYTHONPATH python dpr_scale/citadel_scripts/run_reranking.py -m \
+--config-name msmarco_aws.yaml \
+task=multivec_rerank task/model=citadel_model \
+task.model.tok_projection_dim=32 task.model.cls_projection_dim=128 \
+task.shared_model=True \
++task.add_cls=True \
++task.query_topk=1 +task.context_topk=5 \
++task.output_dir=$PATH_TO_OUTPUT_DIR \
++task.checkpoint_path=$CHECKPOINT_PATH \
+datamodule=generate_query_emb \
+datamodule.test_path=$PATH_TO_TREC_TSV \
++datamodule.test_question_path=$PATH_TO_QUERIES_TSV \
++datamodule.query_trec=True \
++datamodule.test_passage_path=$DATA_PATH \
++topk=100 +cross_encoder=False \
++qrel_path=None \
++create_train_dataset=False \
++dataset=msmarco_passage
 ```
+To get the `bm25.trec` file, please see the details [here](https://github.com/castorini/pyserini/blob/master/docs/experiments-msmarco-passage.md).
+
+### Generate embeddings
+If you are dealing with large corpus with million of documents, shard the corpus first before encoding.
+Run the command with different shards in parallel:
+```
+CHECKPOINT_PATH=your_path_to_ckpt
+for i in {0..5}
+do 
+    CTX_EMBEDDINGS_DIR=your_path_to_shard00${i}_embeddings
+    DATA_PATH=/data_path/msmarco_passage/msmarco_corpus.00${i}.tsv
+    PYTHONPATH=.:$PYTHONPATH python dpr_scale/citadel_scripts/generate_multivec_embeddings.py -m \
+    --config-name msmarco_aws.yaml \
+    datamodule=generate \
+    task=multivec task/model=citadel_model \
+    task.model.tok_projection_dim=32 task.model.cls_projection_dim=128 \
+    +task.add_cls=True \
+    +task.query_topk=1 +task.context_topk=1 \
+    datamodule.test_path=$DATA_PATH \
+    +task.ctx_embeddings_dir=$CTX_EMBEDDINGS_DIR \
+    +task.checkpoint_path=$CHECKPOINT_PATH \
+    +task.add_context_id=False > nohup${i}.log 2>&1&
+done
+```
+The last argument `add_context_id` is for analysis if set `True`. 
+
+### Merge embeddings
+If using multiple gpus to encode the corpus, then we need to merge the embeddings and organize them into inverted index:
+```
+for i in {0..30000..10000} # indices range
+do
+    PYTHONPATH=.:$PYTHONPATH nohup python dpr_scale/citadel_scripts/merge_experts.py \
+    your_path_to_shard00*_embeddings \
+    $MERGED_CTX_EMBEDDINGS_DIR \
+    "${i}-$(($i+10000))" > nohup_${i}.log 2>&1&
+done
+```
+
+### Prune embeddings
+To reduce the index size, we only keep the embeddings with routing weights larger than some threshold:
+```
+pruning_weight=0.9 # default
+PYTHONPATH=.:$PYTHONPATH python dpr_scale/citadel_scripts/prune_experts.py \
+$MERGED_CTX_EMBEDDINGS_DIR/expert \
+$MERGED_CTX_EMBEDDINGS_DIR \
+$pruning_weight \ 
+"0-31000" # index range
+```
+The output is at `${MERGED_CTX_EMBEDDINGS_DIR}/expert_pruned${pruning_weight}`
+
+### Quantize embeddings
+If you want to further compress the embeddings, use our custom product quantization module:
+```
+PYTHONPATH=.:$PYTHONPATH python dpr_scale/citadel_scripts/run_quantization.py -m \
+--config-name msmarco_aws.yaml \
+task=multivec task/model=citadel_model \
++task.ctx_embeddings_dir=$MERGED_CTX_EMBEDDINGS_DIR/expert_pruned${weight} \
++task.output_dir=$MERGED_CTX_EMBEDDINGS_DIR/expert_pruned${weight}_pq_nbits2 \
++cls_dim=128 +dim=32 \
++sub_vec_dim=4 +num_centroids=256 +iter=5 \ 
++cuda=True \ 
++threshold=$threshold \ 
+trainer=gpu_1_host trainer.gpus=1
+```
+You could change the `sub_vec_dim` from 4 to 8 to get nbits=1 compression. We don't recommend changing other parameters unless you know what you are doing.
+
+### Retrieval
+Build Cython extension for fast retrieval on CPU. Please see [here](https://github.com/luyug/COIL/tree/main/retriever#fast-retriver) for details.
+```
+cd dpr-scale/retriever_ext
+pip install Cython
+python setup.py build_ext --inplace
+```
+
+To run retrieval on the compressed corpus embeddings, use:
+```
+PORTION=1.0 # move how much portion of indexes to gpu
+DATA_PATH=/data_path/msmarco_passage/msmarco_corpus.tsv
+PATH_TO_QUERIES_TSV=/data_path/msmarco_passage/dev_small.tsv
+CTX_EMBEDDINGS_DIR=$MERGED_CTX_EMBEDDINGS_DIR/expert_pruned${weight}_pq_nbits2
+CHECKPOINT_PATH=your_path_to_ckpt
+OUTPUT_DIR=your_path_to_output_dir
+
+HYDRA_FULL_ERROR=1 PYTHONPATH=.:$PYTHONPATH python dpr_scale/citadel_scripts/run_citadel_retrieval.py \
+--config-name msmarco_aws.yaml \
+datamodule=generate_multivec_query_emb \
++datamodule.trec_format=True \
+datamodule.test_path=$PATH_TO_QUERIES_TSV \
+datamodule.test_batch_size=1 \
+task=multivec_retrieval task/model=citadel_model \
+task.model.tok_projection_dim=32 \
+task.model.cls_projection_dim=128 +task.add_cls=True task.shared_model=True \
++task.query_topk=1 +task.context_topk=$k \
++task.output_path=$OUTPUT_DIR \
++task.ctx_embeddings_dir=$CTX_EMBEDDINGS_DIR \
++task.checkpoint_path=$CHECKPOINT_PATH \
++task.passages=$DATA_PATH \
++task.portion=$PORTION \
++task.topk=1000 \
++task.cuda=True \
++task.quantizer=pq \
++task.sub_vec_dim=4 \
+trainer.precision=16 \
++task.expert_parallel=True \
+trainer=gpu_1_host trainer.gpus=1
+```
+The output is a trec file in the output dir. Query embeddings are automatically saved in the output_dir.
+
+To run without quantization, use:
+```
+PORTION=1.0 # move how much portion of indexes to gpu
+DATA_PATH=/data_path/msmarco_passage/msmarco_corpus.tsv
+PATH_TO_QUERIES_TSV=/data_path/msmarco_passage/dev_small.tsv
+CTX_EMBEDDINGS_DIR=$MERGED_CTX_EMBEDDINGS_DIR/expert_pruned${weight}
+CHECKPOINT_PATH=your_path_to_ckpt
+OUTPUT_DIR=your_path_to_output_dir
+
+HYDRA_FULL_ERROR=1 PYTHONPATH=.:$PYTHONPATH python dpr_scale/citadel_scripts/run_citadel_retrieval.py \
+--config-name msmarco_aws.yaml \
+datamodule=generate_multivec_query_emb \
++datamodule.trec_format=True \
+datamodule.test_path=$PATH_TO_QUERIES_TSV \
+datamodule.test_batch_size=1 \
+task=multivec_retrieval task/model=citadel_model \
+task.model.tok_projection_dim=32 \
+task.model.cls_projection_dim=128 +task.add_cls=True task.shared_model=True \
++task.query_topk=1 +task.context_topk=$k \
++task.output_path=$OUTPUT_DIR \
++task.ctx_embeddings_dir=$CTX_EMBEDDINGS_DIR \
++task.checkpoint_path=$CHECKPOINT_PATH \
++task.passages=$DATA_PATH \
++task.portion=$PORTION \
++task.topk=1000 +task.cuda=True \
++task.quantizer=None \
++task.sub_vec_dim=4 \
+trainer.precision=16 \
++task.expert_parallel=True \
+trainer=gpu_1_host trainer.gpus=1
+```
+
+You could change `trainer.gpus` to run retrieval on multiple gpus.
+Set `cuda=False` if you want to use cpu for retrieval. Further set `trainer.gpus=0` to use cpu for query encoding as well.
 
 ### Get evaluation metrics for MSMARCO
-python dpr_scale/msmarco_eval.py ~data/msmarco/qrels.dev.small.tsv PATH_TO_OUTPUT_JSON
-
-# Domain-matched Pre-training Tasks for Dense Retrieval
-`Paper: https://arxiv.org/abs/2107.13602`
-
-The sections below provide links to datasets and pretrained models, as well as, instructions to prepare datasets, pretrain and fine-tune them.
-
-## Q&A Datasets
-### PAQ
-Download the dataset from [here](https://dl.fbaipublicfiles.com/dpr_scale/paq/PAQ.dpr.train.neg1.jsonl.zip)
-
-## Conversational Datasets
-You can download the dataset from the respective tables.
-### Reddit
-File | Download Link
-|---|---
-train | [download](https://dl.fbaipublicfiles.com/dpr_scale/reddit/train.200M.jsonl)
-dev | [download](https://dl.fbaipublicfiles.com/dpr_scale/reddit/dev.jsonl)
-
-
-### ConvAI2
-File | Download Link
-|---|---
-train | [download](https://dl.fbaipublicfiles.com/dpr_scale/convai2/train.jsonl)
-dev | [download](https://dl.fbaipublicfiles.com/dpr_scale/convai2/valid.jsonl)
-
-
-### DSTC7
-File | Download Link
-|---|---
-train | [download](https://dl.fbaipublicfiles.com/dpr_scale/dstc7/ubuntu_train.jsonl)
-dev | [download](https://dl.fbaipublicfiles.com/dpr_scale/dstc7/ubuntu_dev.jsonl)
-test | [download](https://dl.fbaipublicfiles.com/dpr_scale/dstc7/ubuntu_test.jsonl)
-
-Prepare by downloading the tar ball linked [here](https://github.com/facebookresearch/ParlAI/blob/master/parlai/tasks/dstc7/build.py), and using the command below.
+This python script uses pytrec_eval in background:
 ```
-DSTC7_DATA_ROOT=<path_of_dir_where_the_data_is_extracted>
-python dpr_scale/data_prep/prep_conv_datasets.py \
-    --dataset dstc7 \
-    --in_file_path $DSTC7_DATA_ROOT/ubuntu_train_subtask_1_augmented.json \
-    --out_file_path $DSTC7_DATA_ROOT/ubuntu_train.jsonl
+python dpr_scale/citadel_scripts/msmarco_eval.py /data_path/data/msmarco_passage/qrels.dev.small.tsv PATH_TO_OUTPUT_TREC_FILE
 ```
 
-### Ubuntu V2
-File | Download Link
-|---|---
-train | [download](https://dl.fbaipublicfiles.com/dpr_scale/ubuntu/train.jsonl)
-dev | [download](https://dl.fbaipublicfiles.com/dpr_scale/ubuntu/valid.jsonl)
-test | [download](https://dl.fbaipublicfiles.com/dpr_scale/ubuntu/test.jsonl)
-
-Prepare by downloading the tar ball linked [here](https://github.com/facebookresearch/ParlAI/blob/master/parlai/tasks/ubuntu/build.py), and using the command below.
+### Get evaluation metrics for TREC DeepLearning 2019 and 2020
+We use [pyserini](https://github.com/castorini/pyserini) to evaluate on trec dl. Feel free to use pytrec_eval as well. The reason is that we need to deal with qrels with different relevance levels in TREC DL. If you plan to use pyserini, please install it in a different environment to avoid package conflicts with dpr-scale.
 ```
-UBUNTUV2_DATA_ROOT=<path_of_dir_where_the_data_is_extracted>
-python dpr_scale/data_prep/prep_conv_datasets.py \
-    --dataset ubuntu2 \
-    --in_file_path $UBUNTUV2_DATA_ROOT/train.csv \
-    --out_file_path $UBUNTUV2_DATA_ROOT/train.jsonl
+# Recall
+python -m pyserini.eval.trec_eval -c -mrecall.1000 -l 2 /data_path/trec_dl/2019qrels-pass.txt PATH_TO_OUTPUT_TREC_FILE
+
+# nDCG@10
+python -m pyserini.eval.trec_eval -c -mndcg_cut.10 /data_path/trec_dl/2019qrels-pass.txt PATH_TO_OUTPUT_TREC_FILE
 ```
 
-## Pretraining DPR
-### Pretrained Checkpoints
-Pretrained Model | Dataset | Download Link
-|---|---|---
-BERT-base | PAQ | [download](https://dl.fbaipublicfiles.com/dpr_scale/checkpoints/paq_bert_base.ckpt)
-BERT-large | PAQ | [download](https://dl.fbaipublicfiles.com/dpr_scale/checkpoints/paq_bert_large.ckpt)
-BERT-base | Reddit | [download](https://dl.fbaipublicfiles.com/dpr_scale/checkpoints/reddit_bert_base.ckpt)
-BERT-large | Reddit | [download](https://dl.fbaipublicfiles.com/dpr_scale/checkpoints/reddit_bert_large.ckpt)
-RoBERTa-base | Reddit | [download](https://dl.fbaipublicfiles.com/dpr_scale/checkpoints/reddit_roberta_base.ckpt)
-RoBERTa-large | Reddit | [download](https://dl.fbaipublicfiles.com/dpr_scale/checkpoints/reddit_roberta_large.ckpt)
+## BEIR
+We will use the ckpt trained on MS MARCO passsage-v1 to evaulate on 13 datasets in [BEIR](https://github.com/beir-cellar/beir).
 
-### Pretraining on PAQ dataset
+### Data Prep
+First we need to download the beir datasets and convert the data into dpr format:
 ```
-DPR_ROOT=<path_of_your_repo's_root>
-MODEL="bert-large-uncased"
-NODES=8
-BSZ=16
-MAX_EPOCHS=20
-LR=1e-5
-TIMOUT_MINS=4320
-EXP_DIR=<path_of_the_experiment_dir>
-TRAIN_PATH=<path_of_the_training_data_file>
-mkdir -p ${EXP_DIR}/logs
-PYTHONPATH=$DPR_ROOT python ${DPR_ROOT}/dpr_scale/main.py -m \
-    --config-dir ${DPR_ROOT}/dpr_scale/conf \
-    --config-name nq.yaml \
-    hydra.launcher.timeout_min=$TIMOUT_MINS \
-    hydra.sweep.dir=${EXP_DIR} \
-    trainer.num_nodes=${NODES} \
-    task.optim.lr=${LR} \
-    task.model.model_path=${MODEL} \
-    trainer.max_epochs=${MAX_EPOCHS} \
-    datamodule.train_path=$TRAIN_PATH \
-    datamodule.batch_size=${BSZ} \
-    datamodule.num_negative=1 \
-    datamodule.num_val_negative=10 \
-    datamodule.num_test_negative=50 > ${EXP_DIR}/logs/log.out 2> ${EXP_DIR}/logs/log.err &
+DATASET=(arguana climate-fever dbpedia-entity fever fiqa hotpotqa nfcorpus nq quora scifact scidocs trec-covid webis-touche2020)
+for dataset in ${DATASET[*]}
+do
+echo $dataset
+python dpr_scale/convert_beir_to_dpr_format.py $dataset <output path>
+done
 ```
 
-### Pretraining on Reddit dataset
+### Generate embeddings
+We then encode the corpus of each dataset. For datasets with large corpus, we split it into multiple shards:
 ```
-# Use a batch size of 16 for BERT and RoBERTa base models.
-BSZ=4
-NODES=8
-MAX_EPOCHS=5
-WARMUP_STEPS=10000
-LR=1e-5
-MODEL="roberta-large"
-EXP_DIR=<path_of_the_experiment_dir>
-PYTHONPATH=. python dpr_scale/main.py -m \
-    --config-dir ${DPR_ROOT}/dpr_scale/conf \
-    --config-name reddit.yaml \
-    hydra.launcher.nodes=${NODES} \
-    hydra.sweep.dir=${EXP_DIR} \
-    trainer.num_nodes=${NODES} \
-    task.optim.lr=${LR} \
-    task.model.model_path=${MODEL} \
-    trainer.max_epochs=${MAX_EPOCHS} \
-    task.warmup_steps=${WARMUP_STEPS} \
-    datamodule.batch_size=${BSZ} > ${EXP_DIR}/logs/log.out 2> ${EXP_DIR}/logs/log.err &
+CHECKPOINT_PATH=your_path_to_ckpt
+DATASET=(arguana nfcorpus fiqa quora scidocs scifact trec-covid webis-touche2020)
+for dataset in ${DATASET[*]} 
+do
+    echo $dataset
+    CTX_EMBEDDINGS_DIR=your_path_to_output_embedding_dir
+    DATA_PATH=/data_path/beir/datasets/${dataset}/dpr-scale/corpus.tsv
+
+    HYDRA_FULL_ERROR=1 PYTHONPATH=.:$PYTHONPATH nohup python dpr_scale/citadel_scripts/generate_multivec_embeddings.py -m --config-name msmarco_aws.yaml \
+    datamodule=generate \
+    datamodule.test_path=$DATA_PATH \
+    task=multivec task/model=citadel_model \
+    task.model.tok_projection_dim=32 task.model.cls_projection_dim=128 \
+    task.shared_model=True \
+    +task.add_cls=True \
+    +task.query_topk=1 +task.context_topk=5 \
+    +task.weight_threshold=0.0 \
+    +task.ctx_embeddings_dir=$CTX_EMBEDDINGS_DIR \
+    +task.checkpoint_path=$CHECKPOINT_PATH \
+    +task.add_context_id=False > nohup_${dataset}.log 2>&1&
+done
+
+DATASET=(climate-fever dbpedia-entity fever hotpotqa nq)
+SHARD=(0 1 2)
+for dataset in ${DATASET[*]} 
+do
+    echo $dataset
+    for shard in ${SHARD[*]}
+    do
+    CTX_EMBEDDINGS_DIR=your_path_to_output_shard_embeddings
+    DATA_PATH=/data_path/beir/datasets/${dataset}/dpr-scale/corpus.00$shard.tsv
+
+    HYDRA_FULL_ERROR=1 PYTHONPATH=.:$PYTHONPATH nohup python dpr_scale/citadel_scripts/generate_multivec_embeddings.py -m --config-name msmarco_aws.yaml \
+    datamodule=generate \
+    datamodule.test_path=$DATA_PATH \
+    task=multivec task/model=citadel_model \
+    task.model.tok_projection_dim=32 task.model.cls_projection_dim=128 \
+    task.shared_model=True +task.cross_batch=False +task.in_batch=True \
+    +task.add_cls=True \
+    +task.query_topk=1 +task.context_topk=5 \
+    +task.weight_threshold=0.0 \
+    +task.ctx_embeddings_dir=$CTX_EMBEDDINGS_DIR \
+    +task.checkpoint_path=$CHECKPOINT_PATH \
+    +task.add_context_id=False > nohup_${dataset}_${shard}.log 2>&1&
+    done
+done
 ```
 
-## Fine-tuning DPR on downstream tasks/datasets
-### Fine-tune the pretrained PAQ checkpoint
+### Merge embeddings
 ```
-# You can also try 2e-5 or 5e-5. Usually these 3 learning rates work best.
-LR=1e-5
-# Use a batch size of 32 for BERT and RoBERTa base models.
-BSZ=12
-MODEL="bert-large-uncased"
-MAX_EPOCHS=40
-WARMUP_STEPS=1000
-NODES=1
-PRETRAINED_CKPT_PATH=<path_of_checkpoint_pretrained_on_reddit>
-EXP_DIR=<path_of_the_experiment_dir>
-PYTHONPATH=. python dpr_scale/main.py -m \
-    --config-dir ${DPR_ROOT}/dpr_scale/conf \
-    --config-name nq.yaml \
-    hydra.launcher.name=${NAME} \
-    hydra.sweep.dir=${EXP_DIR} \
-    trainer.num_nodes=${NODES} \
-    trainer.max_epochs=${MAX_EPOCHS} \
-    datamodule.num_negative=1 \
-    datamodule.num_val_negative=25 \
-    datamodule.num_test_negative=50 \
-    +trainer.val_check_interval=150 \
-    task.warmup_steps=${WARMUP_STEPS} \
-    task.optim.lr=${LR} \
-    task.pretrained_checkpoint_path=$PRETRAINED_CKPT_PATH \
-    task.model.model_path=${MODEL} \
-    datamodule.batch_size=${BSZ} > ${EXP_DIR}/logs/log.out 2> ${EXP_DIR}/logs/log.err &
+DATASET=(arguana nfcorpus fiqa quora scidocs scifact trec-covid webis-touche2020 climate-fever dbpedia-entity fever hotpotqa nq)
+for dataset in ${DATASET[*]} 
+do
+echo $dataset
+OUTPUT_DIR=your_path_to_merged_embeddings
+CTX_EMBEDDINGS_DIR=your_path_to_embedding_dirs
+PYTHONPATH=.:$PYTHONPATH python dpr_scale/citadel_scripts/merge_experts.py $OUTPUT_DIR "$CTX_EMBEDDINGS_DIR" "0-31000"
+done
+```
+You could further compress the index size using product quantization and pruning. We skip the compression step for simplicity.
+
+### Retrieval
+```
+dataset=$1
+OUTPUT_DIR=path_to_retrieval_output_dir
+CTX_EMBEDDINGS_DIR=path_to_merged_embeddings/expert
+CHECKPOINT_PATH=path_to_your_ckpt
+
+I2D_PATH=/data_path/beir/datasets/${dataset}/dpr-scale/index2docid.tsv
+DATA_PATH=/data_path/beir/datasets/${dataset}/dpr-scale/corpus.tsv
+PATH_TO_QUERIES_TSV=/data_path/beir/datasets/${dataset}/dpr-scale/queries.tsv
+
+PORTION=0.001 # how much portion of the index should be moved to GPU before retrieval
+
+HYDRA_FULL_ERROR=1 PYTHONPATH=.:$PYTHONPATH python dpr_scale/citadel_scripts/run_citadel_retrieval.py \
+--config-name msmarco_aws.yaml \
+datamodule=generate_multivec_query_emb \
+datamodule.test_path=$PATH_TO_QUERIES_TSV \
+datamodule.test_batch_size=1 \
++datamodule.trec_format=True \
+task=multivec_retrieval task/model=citadel_model \
+task.model.tok_projection_dim=32 \
+task.model.cls_projection_dim=128 +task.add_cls=True task.shared_model=True \
++task.query_topk=1 +task.context_topk=5 \
++task.output_path=$OUTPUT_DIR \
++task.ctx_embeddings_dir=$CTX_EMBEDDINGS_DIR \
++task.checkpoint_path=$CHECKPOINT_PATH \
++task.index2docid_path=$I2D_PATH \
++task.passages=$DATA_PATH \
++task.portion="$PORTION" \
++task.topk=1000 +task.cuda=True +task.quantizer=None +task.sub_vec_dim=4 trainer.precision=16 +task.expert_parallel=True \
+trainer=gpu_1_host trainer.gpus=1
 ```
 
-### Fine-tune the pretrained Reddit checkpoint
-Batch sizes that worked on Volta 32GB GPUs for respective model and datasets.
-Model | Dataset | Batch Size
-|---|---|---
-BERT/RoBERTa base | ConvAI2 | 64
-RBERT/RoBERTa base | ConvAI2 | 16
-BERT/RoBERTa base | DSTC7 | 24
-BERT/RoBERTa base | DSTC7 | 8
-BERT/RoBERTa base | Ubuntu V2 | 64
-BERT/RoBERTa large | Ubuntu V2 | 16
+### Evaluation
+You could run evaluation on beir retrieval results using:
 ```
-# Change the config file name to convai2.yaml or dstc7.yaml for the respective datasets.
-CONFIG_FILE_NAME=ubuntuv2.yaml
-# You can also try 2e-5 or 5e-5. Usually these 3 learning rates work best.
-LR=1e-5
-BSZ=16
-NODES=1
-MAX_EPOCHS=5
-WARMUP_STEPS=10000
-MODEL="roberta-large"
-PRETRAINED_CKPT_PATH=<path_of_checkpoint_pretrained_on_reddit>
-EXP_DIR=<path_of_the_experiment_dir>
-PYTHONPATH=${DPR_ROOT} python ${DPR_ROOT}/dpr_scale/main.py -m \
-    --config-dir=${DPR_ROOT}/dpr_scale/conf \
-    --config-name=$CONFIG_FILE_NAME \
-    hydra.launcher.nodes=${NODES} \
-    hydra.sweep.dir=${EXP_DIR} \
-    trainer.num_nodes=${NODES} \
-    trainer.max_epochs=${MAX_EPOCHS} \
-    +trainer.val_check_interval=150 \
-    task.pretrained_checkpoint_path=$PRETRAINED_CKPT_PATH \
-    task.warmup_steps=${WARMUP_STEPS} \
-    task.optim.lr=${LR} \
-    task.model.model_path=$MODEL \
-    datamodule.batch_size=${BSZ} > ${EXP_DIR}/logs/log.out 2> ${EXP_DIR}/logs/log.err &
+DATASET=(arguana climate-fever dbpedia-entity fever fiqa hotpotqa nfcorpus nq quora scifact scidocs trec-covid webis-touche2020)
+for dataset in ${DATASET[*]} 
+do
+echo $dataset
+QRELS_PATH=/data_path/beir/datasets/${dataset}/dpr-scale/test.tsv
+TREC_PATH=path_to_retrieval_output_dir/retrieval.trec
+python dpr_scale/citadel_scripts/run_beir_eval.py $QRELS_PATH $TREC_PATH > /data_path/results/beir/${dataset}/eval_results.txt
+done
 ```
 
 ## License
-dpr-scale is CC-BY-NC 4.0 licensed as of now.
+The majority of CITADEL is licensed under CC-BY-NC, however portions of the project are available under separate license terms: code from the [COIL](https://github.com/luyug/COIL) project is licensed under the Apache 2.0 license.
