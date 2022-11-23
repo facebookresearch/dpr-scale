@@ -1,5 +1,13 @@
 Scalable implementation of dense retrieval.
 
+## This repo implements the following papers:
+
+- [Domain-matched Pre-training Tasks for Dense Retrieval](https://arxiv.org/abs/2107.13602)
+- [Salient Phrase Aware Dense Retrieval: Can a Dense Retriever Imitate a Sparse One?](https://arxiv.org/abs/2110.06918)
+    - https://github.com/facebookresearch/dpr-scale/tree/main/spar
+- [CITADEL: Conditional Token Interaction via Dynamic Lexical Routing for Efficient and Effective Multi-Vector Retrieval](https://arxiv.org/abs/2211.10411)
+    - https://github.com/facebookresearch/dpr-scale/tree/citadel
+
 
 ## Training on cluster
 
