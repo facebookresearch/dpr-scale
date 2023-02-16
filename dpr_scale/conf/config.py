@@ -1,9 +1,8 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
+# (c) Facebook, Inc. and its affiliates. Confidential and proprietary.
 
 from dataclasses import dataclass, field
 from typing import List, Any
 
-# @manual "//github/facebookresearch/hydra:hydra"
 from hydra.core.config_store import ConfigStore
 from omegaconf import MISSING
 

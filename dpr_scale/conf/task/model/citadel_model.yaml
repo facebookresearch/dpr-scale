@@ -1,0 +1,6 @@
+# @package _group_
+_target_: dpr_scale.models.citadel_models.citadel_model.CITADELEncoder
+model_path: bert-base-uncased
+cls_projection_dim: 128
+tok_projection_dim: 32
+dropout: 0.1

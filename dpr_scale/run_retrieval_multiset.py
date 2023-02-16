@@ -9,7 +9,7 @@ import faiss
 import glob
 import pickle
 import pathlib
-from dpr_scale.datamodule.dpr import CSVDataset
+from dpr_scale.datamodule.dpr import CSVDataset, QueryCSVDataset
 from dpr_scale.utils.utils import PathManager
 try:
     # dummy import to make Manifold paths happy
@@ -42,7 +42,7 @@ def get_parser():
         help="list of query emb files"
     )
     parser.add_argument(
-        "--questions_jsonl_paths",
+        "--questions_tsv_paths",
         type=str,
         nargs='+',
         default="list of dataset files",
@@ -110,7 +110,7 @@ def main(args, logger):
 
     assert (
         len(args.query_emb_paths)
-        == len(args.questions_jsonl_paths)
+        == len(args.questions_tsv_paths)
         == len(args.output_json_paths)
     )
     # index all passages
@@ -127,13 +127,12 @@ def main(args, logger):
     print(f"Loading passages from {args.passages_tsv_path}")
     ctxs = CSVDataset(args.passages_tsv_path)
 
-    for questions_jsonl_path, query_emb_path, output_json_path in zip(
-        args.questions_jsonl_paths, args.query_emb_paths, args.output_json_paths
+    for questions_tsv_path, query_emb_path, output_json_path in zip(
+        args.questions_tsv_paths, args.query_emb_paths, args.output_json_paths
     ):
         # load questions file
-        print(f"Loading questions file {questions_jsonl_path}")
-        with PathManager.open(questions_jsonl_path) as f:
-            questions = [json.loads(line) for line in f]
+        print(f"Loading questions file {questions_tsv_path}")
+        questions = QueryCSVDataset(questions_tsv_path)
 
         # reload question embeddings
         print("Loading question vectors.")

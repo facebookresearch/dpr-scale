@@ -1,0 +1,35 @@
+defaults:
+  - config
+  - override trainer: gpu_1_host
+  - override task/optim: adamw
+
+task:
+  shared_model: false
+  in_batch_eval: false
+  optim:
+    lr: 3e-5
+  warmup_steps: 10000
+
+datamodule:
+  _target_: dpr_scale.datamodule.dpr.DenseRetrieverMultiJsonlDataModule
+  corpus_path: /fsx/s269lin/data/msmarco/msmarco-passage/corpus/collection.tsv
+  train_path: [/fsx/s269lin/data/msmarco/msmarco-passage/train/official_train.jsonl]
+  val_path: /fsx/s269lin/data/msmarco/msmarco-passage/train/dev.jsonl
+  test_path: /fsx/s269lin/data/msmarco/msmarco-passage/train/dev.jsonl
+  batch_size: 8
+  num_negative: 7
+  pos_ctx_sample: true
+  num_val_negative: 10
+  num_test_negative: 50
+  drop_last: false
+  use_title: false
+
+trainer:
+  gpus: 1
+  num_nodes: 1
+  max_epochs: 3
+  num_sanity_val_steps: 0
+  log_every_n_steps: 10
+  gradient_clip_val: 2.0
+  precision: 16
+  strategy: ddp

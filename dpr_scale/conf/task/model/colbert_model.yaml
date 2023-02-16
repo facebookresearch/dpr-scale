@@ -1,0 +1,5 @@
+# @package _group_
+_target_: dpr_scale.models.citadel_models.colbert_model.ColBERTEncoder
+model_path: bert-base-uncased
+projection_dim: 128
+dropout: 0.1

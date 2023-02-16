@@ -8,7 +8,7 @@ import json
 import os
 import pickle
 from dpr_scale.conf.config import MainConfig
-from dpr_scale.datamodule.dpr import CSVDataset
+from dpr_scale.datamodule.dpr import CSVDataset, QueryCSVDataset
 from omegaconf import open_dict
 from pytorch_lightning.trainer import Trainer
 from typing import Dict, List
@@ -98,8 +98,7 @@ def main(cfg: MainConfig):
 
     # load questions file
     print(f"Loading questions file {cfg.datamodule.test_path}")
-    with open(cfg.datamodule.test_path) as f:
-        questions = [json.loads(line) for line in f]
+    questions = QueryCSVDataset(cfg.datamodule.test_path)
 
     # load all passages:
     print(f"Loading passages from {cfg.task.passages}")

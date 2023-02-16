@@ -18,7 +18,8 @@ class BertTransform(HFTransform):
         return_tensors: bool = True,
     ):
         nn.Module.__init__(self)
-        local_model_path = PathManager.get_local_path(model_path, recursive=True)
+        # remove recursive argument which is not supported now
+        local_model_path = PathManager.get_local_path(model_path)
         self.tokenizer = BertTokenizer.from_pretrained(local_model_path)
         self.sep_token = self.tokenizer.sep_token
         self.max_seq_len = max_seq_len

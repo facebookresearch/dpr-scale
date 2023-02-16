@@ -1,0 +1,8 @@
+# @package _group_
+_target_: dpr_scale.task.citadel_task.MultiVecRetrieverTask
+shared_model: false
+in_batch_eval: false
+# Temporary till we reformat LightningModule
+datamodule: null
+warmup_steps: null
+pretrained_checkpoint_path:

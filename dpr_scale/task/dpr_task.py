@@ -4,11 +4,10 @@
 import hydra
 import torch
 import torch.nn as nn
-from dpr_scale.utils.utils import ScriptEncoder, PathManager
+from dpr_scale.utils.utils import PathManager, ScriptEncoder
 from pytorch_lightning import LightningModule
-from torch.distributed.algorithms.ddp_comm_hooks.default_hooks import (
-    fp16_compress_hook,
-)
+from pytorch_lightning.strategies import DDPShardedStrategy, DDPStrategy
+from torch.distributed.algorithms.ddp_comm_hooks.default_hooks import fp16_compress_hook
 from torch.optim.lr_scheduler import LambdaLR
 from torch.serialization import default_restore_location
 
@@ -25,11 +24,16 @@ class DenseRetrieverTask(LightningModule):
         k=1,  # k for accuracy@k metric
         shared_model: bool = True,  # shared encoders
         in_batch_eval: bool = True,  # use only in-batch contexts for val
+        in_batch_negatives: bool = True,  # train using in-batch negatives
         warmup_steps: int = 0,
         fp16_grads: bool = False,
         pretrained_checkpoint_path: str = "",
+        softmax_temperature: float = 1.0,
     ):
         super().__init__()
+        # save all the task hyperparams
+        # so we can instantiate it much easily later.
+        self.save_hyperparameters()
         self.transform_conf = (
             transform.text_transform
             if hasattr(transform, "text_transform")
@@ -41,9 +45,11 @@ class DenseRetrieverTask(LightningModule):
         self.k = k
         self.loss = nn.CrossEntropyLoss()
         self.in_batch_eval = in_batch_eval
+        self.in_batch_negatives = in_batch_negatives
         self.warmup_steps = warmup_steps
         self.fp16_grads = fp16_grads
         self.pretrained_checkpoint_path = pretrained_checkpoint_path
+        self.softmax_temperature = softmax_temperature
         self.setup_done = False
 
     def setup(self, stage: str):
@@ -83,31 +89,43 @@ class DenseRetrieverTask(LightningModule):
 
     def on_pretrain_routine_start(self):
         if self.fp16_grads:
-            self.trainer.training_type_plugin._model.register_comm_hook(
-                None, fp16_compress_hook
-            )
+            self.trainer.strategy._model.register_comm_hook(None, fp16_compress_hook)
+
+    def _encode_sequence(self, token_ids, encoder_model):
+        encoded_seq = encoder_model(token_ids)  # bs x d
+        return encoded_seq
 
     def sim_score(self, query_repr, context_repr, mask=None):
         scores = torch.matmul(
             query_repr, torch.transpose(context_repr, 0, 1)
-        )  # num_q x num_ctx
+        )  # bs x ctx_cnt
         if mask is not None:
-            # mask is size num_ctx
-            scores[mask.repeat(scores.size(0), 1)] = float("-inf")
+            # bs x ctx_cnt
+            scores[mask] = float("-inf")
         return scores
+
+    def encode_queries(self, query_ids):
+        query_repr = self._encode_sequence(query_ids, self.query_encoder)  # bs x d
+        return query_repr
+
+    def encode_contexts(self, contexts_ids):
+        contexts_repr = self._encode_sequence(
+            contexts_ids, self.context_encoder
+        )  # ctx_cnt x d
+        return contexts_repr
 
     def forward(self, query_ids, contexts_ids):
         # encode query and contexts
-        query_repr = self.query_encoder(query_ids)  # bs x d
-        contexts_repr = self.context_encoder(contexts_ids)  # ctx_cnt x d
+        query_repr = self.encode_queries(query_ids)  # bs x d
+        contexts_repr = self.encode_contexts(contexts_ids)  # ctx_cnt x d
         return query_repr, contexts_repr
 
     def configure_optimizers(self):
         self.optimizer = hydra.utils.instantiate(self.optim_conf, self.parameters())
-        if self.trainer.max_steps:
+        if self.trainer.max_steps and self.trainer.max_steps > 0:
             training_steps = self.trainer.max_steps
         else:
-            steps_per_epoch = len(self.train_dataloader())
+            steps_per_epoch = len(self.trainer.datamodule.train_dataloader())
             training_steps = steps_per_epoch * self.trainer.max_epochs
         print(
             f"Configured LR scheduler for total {training_steps} training steps, "
@@ -134,7 +152,7 @@ class DenseRetrieverTask(LightningModule):
 
     def training_step(self, batch, batch_idx):
         """
-        This receives queries, each with mutliple contexts.
+        This receives queries, each with multiple contexts.
         """
         query_ids = batch["query_ids"]  # bs x tokens
         contexts_ids = batch["contexts_ids"]  # ctx_cnt x ctx_len
@@ -142,34 +160,55 @@ class DenseRetrieverTask(LightningModule):
         mask = batch["ctx_mask"]  # ctx_cnt
         query_repr, context_repr = self(query_ids, contexts_ids)  # bs
 
-        if self.trainer.accelerator_connector.use_ddp:
-            query_to_send = query_repr.detach()
-            context_to_send = context_repr.detach()
-            # assumes all nodes have same number of contexts
-            all_query_repr, all_context_repr, all_labels, all_mask = self.all_gather(
-                (query_to_send, context_to_send, pos_ctx_indices, mask)
-            )
-            offset = 0
-            all_query_list = []
-            all_context_list = []
+        if self.in_batch_negatives:
+            # gather all tensors for training w/ in_batch_negatives
+            if isinstance(self.trainer.strategy, (DDPStrategy, DDPShardedStrategy)):
+                query_to_send = query_repr.detach()
+                context_to_send = context_repr.detach()
+                # assumes all nodes have same number of contexts
+                (
+                    all_query_repr,
+                    all_context_repr,
+                    all_labels,
+                    all_mask,
+                ) = self.all_gather(
+                    (query_to_send, context_to_send, pos_ctx_indices, mask)
+                )
+                offset = 0
+                all_query_list = []
+                all_context_list = []
 
-            for i in range(all_labels.size(0)):
-                if i != self.global_rank:
-                    all_query_list.append(all_query_repr[i])
-                    all_context_list.append(all_context_repr[i])
-                else:
-                    # to calculate grads for this node only
-                    all_query_list.append(query_repr)
-                    all_context_list.append(context_repr)
-                all_labels[i] += offset
-                offset += all_context_repr[i].size(0)
+                for i in range(all_labels.size(0)):
+                    if i != self.global_rank:
+                        all_query_list.append(all_query_repr[i])
+                        all_context_list.append(all_context_repr[i])
+                    else:
+                        # to calculate grads for this node only
+                        all_query_list.append(query_repr)
+                        all_context_list.append(context_repr)
+                    all_labels[i] += offset
+                    offset += all_context_repr[i].size(0)
 
-            context_repr = torch.cat(all_context_list, dim=0)  # total_ctx x dim
-            query_repr = torch.cat(all_query_list, dim=0)  # total_query x dim
-            pos_ctx_indices = torch.flatten(all_labels)  # total_query
-            mask = torch.flatten(all_mask)  # total_ctx
+                context_repr = torch.cat(all_context_list, dim=0)  # total_ctx x dim
+                query_repr = torch.cat(all_query_list, dim=0)  # total_query x dim
+                pos_ctx_indices = torch.flatten(all_labels)  # total_query
+                mask = torch.flatten(all_mask)  # total_ctx
+            # create a query-ctx mask where all ctxs except dummies will be unmasked for each query.
+            query_ctx_mask = mask.repeat(query_repr.shape[0], 1)  # bs x ctx_cnt
+        else:
+            # create a query-ctx mask where only non-dummy ctxs directly attached to the query will be unmasked.
+            num_ctx_per_batch = int(mask.shape[0] / query_repr.shape[0])  # ctx_cnt / bs
+            query_ctx_mask = torch.ones(
+                query_repr.shape[0], mask.shape[0], dtype=torch.bool
+            )  # bs x ctx_cnt
+            for i, pos_ctx_id in enumerate(pos_ctx_indices):
+                query_ctx_mask[i, pos_ctx_id : pos_ctx_id + num_ctx_per_batch] = mask[
+                    pos_ctx_id : pos_ctx_id + num_ctx_per_batch
+                ]
 
-        scores = self.sim_score(query_repr, context_repr, mask)
+        scores = self.sim_score(query_repr, context_repr, query_ctx_mask)
+        # temperature scaling
+        scores /= self.softmax_temperature
         loss = self.loss(scores, pos_ctx_indices)
         self.log("train_loss", loss, prog_bar=True)
         return loss
@@ -180,7 +219,8 @@ class DenseRetrieverTask(LightningModule):
         pos_ctx_indices = batch["pos_ctx_indices"]  # bs x ctx_cnt
         mask = batch["ctx_mask"]  # ctx_cnt
         query_repr, contexts_repr = self(query_ids, contexts_ids)
-        pred_context_scores = self.sim_score(query_repr, contexts_repr, mask)
+        query_ctx_mask = mask.repeat(query_repr.shape[0], 1)
+        pred_context_scores = self.sim_score(query_repr, contexts_repr, query_ctx_mask)
         loss = self.loss(pred_context_scores, pos_ctx_indices)
 
         return (
@@ -220,6 +260,7 @@ class DenseRetrieverTask(LightningModule):
                 total_count += query_repr.size(0)
                 total_loss += loss
             total_ctx_count = total_ctx_count / len(outputs)
+            total_loss = total_loss / len(outputs)
         else:
             # collate the representation and gold +ve labels
             all_query_repr = []
@@ -236,7 +277,7 @@ class DenseRetrieverTask(LightningModule):
             # gather all contexts
             all_context_repr = torch.cat(all_context_repr, dim=0)
             all_mask = torch.cat(all_mask, dim=0)
-            if self.trainer.accelerator_connector.use_ddp:
+            if self.trainer.world_size > 1:
                 all_context_repr, all_mask = self.all_gather(
                     (all_context_repr, all_mask)
                 )
@@ -246,7 +287,10 @@ class DenseRetrieverTask(LightningModule):
                 all_context_repr = torch.cat(tuple(all_context_repr), dim=0)
                 all_mask = torch.cat(tuple(all_mask), dim=0)
             all_query_repr = torch.cat(all_query_repr, dim=0)
-            scores = self.sim_score(all_query_repr, all_context_repr, all_mask)
+            all_query_ctx_mask = all_mask.repeat(all_query_repr.shape[0], 1)
+            scores = self.sim_score(
+                all_query_repr, all_context_repr, all_query_ctx_mask
+            )
             total_count = all_query_repr.size(0)
             total_ctx_count = scores.size(1) - torch.sum(all_mask)
             total_avg_rank, total_mrr, total_score = self.compute_rank_metrics(
@@ -269,13 +313,13 @@ class DenseRetrieverTask(LightningModule):
         return self._eval_step(batch, batch_idx)
 
     def validation_epoch_end(self, valid_outputs):
-        self._eval_epoch_end(valid_outputs)
+        self._eval_epoch_end(valid_outputs) if valid_outputs else None
 
     def test_step(self, batch, batch_idx):
         return self._eval_step(batch, batch_idx)
 
     def test_epoch_end(self, test_outputs):
-        self._eval_epoch_end(test_outputs, "test")
+        self._eval_epoch_end(test_outputs, "test") if test_outputs else None
 
     @torch.no_grad()
     def to_torchscript(
@@ -294,13 +338,22 @@ class DenseRetrieverTask(LightningModule):
             result = {"ctx_encoder": ctx_encoder}
             # Quantize. TODO when PL has better handling link this with the save_quantized
             # flag in ModelCheckpoint
-            ctx_encoder_qt = ScriptEncoder(transform, self.context_encoder, True)
+            ctx_encoder_qt = ScriptEncoder(
+                transform, self.context_encoder, quantize=True
+            )
             ctx_encoder_qt = torch.jit.script(ctx_encoder_qt.eval(), **kwargs)
             result["ctx_encoder_qt"] = ctx_encoder_qt
             if not self.shared_model:
                 q_encoder = ScriptEncoder(transform, self.query_encoder)
                 q_encoder = torch.jit.script(q_encoder.eval(), **kwargs)
                 result["q_encoder"] = q_encoder
+                # Quantize. TODO when PL has better handling link this with the save_quantized
+                # flag in ModelCheckpoint
+                q_encoder_qt = ScriptEncoder(
+                    transform, self.query_encoder, quantize=True
+                )
+                q_encoder_qt = torch.jit.script(q_encoder_qt.eval(), **kwargs)
+                result["q_encoder_qt"] = q_encoder_qt
         else:
             raise ValueError(
                 "The 'method' parameter only supports 'script',"

@@ -1,0 +1,3 @@
+# @package _group_
+_target_: dpr_scale.models.citadel_models.cross_encoder.CrossEncoder
+model_path: /fsx/mhli/pre-trained/ms-marco-MiniLM-L-6-v2

@@ -7,7 +7,67 @@ Scalable implementation of dense retrieval.
     - https://github.com/facebookresearch/dpr-scale/tree/main/spar
 - [CITADEL: Conditional Token Interaction via Dynamic Lexical Routing for Efficient and Effective Multi-Vector Retrieval](https://arxiv.org/abs/2211.10411)
     - https://github.com/facebookresearch/dpr-scale/tree/citadel
+- [How to Train Your DRAGON: Diverse Augmentation Towards Generalizable Dense Retrieval](https://arxiv.org/abs/2302.07452)
+    - https://github.com/facebookresearch/dpr-scale/tree/main/dragon
 
+
+## Input Data Format (JSONL)
+Linewise JSON file where each row typically looks like:
+```
+{
+    "question": ...,
+    "positive_ctxs": [
+        {
+        "title": "...",
+        "text": "....",
+        <optional>
+        "id": ...,
+        "relevance": ...
+        }, {...}, ...
+    ],
+    "hard_negative_ctxs": [{...}, {...}, ...]
+}
+```
+
+or
+```
+{
+    "question": ...,
+    "id": ...,
+    "ctxs": [
+        {
+        "has_answer": True or False,    
+        "title": "...",
+        "text": "....",
+        <optional>
+        "id": ...,
+        "relevance": ...
+        }, {...}, ...
+    ]
+}
+```
+
+If your training data is large, you can use a lightweight format by specifying the line number (`docidx` starting from 0) of the document in the corpus without storing its title and text:
+```
+{
+    "question": ...,
+    "positive_ctxs": [
+        {
+        "docidx": ..., # denote the position of the passage in the corpus, starting from 0
+        <optional>
+        "id": ...,
+        "relevance": ...
+        }, {...}, ...
+    ],
+    "hard_negative_ctxs": [{...}, {...}, ...]
+}
+```
+This format requires you to use `DenseRetrieverMultiJsonlDataModule` and set `--corpus_path` while training. See below example with config `msmarco_baseline.yaml`. The corpus format follow the default Wiki corpus format with header at first line:
+```
+id"\t"text"\t"title
+<id>"\t"<text>"\t"<title>
+...
+```
 
 ## Training on cluster
 
@@ -15,6 +75,11 @@ By default it trains locally:
 
 ```
 PYTHONPATH=.:$PYTHONPATH python dpr_scale/main.py trainer.gpus=1
+``` 
+
+You can try our example of baseline training locally on MS MARCO dataset with the lightweight data format:
+```
+PYTHONPATH=.:$PYTHONPATH python dpr_scale/main.py -m --config-name msmarco_baseline.yaml 
 ```
 
 ### SLURM Training

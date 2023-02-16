@@ -1,0 +1,4 @@
+# @package _global_
+datamodule:
+  _target_: dpr_scale.datamodule.dpr.DenseRetrieverQueriesDataModule
+  test_batch_size: 128

@@ -17,7 +17,8 @@ class HFEncoder(nn.Module):
         projection_dim: Optional[int] = None,
     ):
         super().__init__()
-        local_model_path = PathManager.get_local_path(model_path, recursive=True)
+        # remove recursive argument which is not supported now
+        local_model_path = PathManager.get_local_path(model_path)
         cfg = AutoConfig.from_pretrained(local_model_path)
         cfg.attention_probs_dropout_prob = dropout
         cfg.hidden_dropout_prob = dropout
@@ -33,6 +34,8 @@ class HFEncoder(nn.Module):
             )
 
     def forward(self, tokens):
-        last_layer, _ = self.transformer(**tokens)  # B x T x C
+        # make it transformer 4.x compatible
+        outputs = self.transformer(**tokens)  # B x T x C
+        last_layer = outputs[0]
         sentence_rep = self.project(last_layer[:, 0, :])
         return sentence_rep.clone()

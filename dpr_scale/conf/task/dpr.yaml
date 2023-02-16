@@ -4,5 +4,5 @@ shared_model: false
 in_batch_eval: false
 # Temporary till we reformat LightningModule
 datamodule: null
-warmup_steps: null
+warmup_steps: 0 # avoid error in inference
 pretrained_checkpoint_path:

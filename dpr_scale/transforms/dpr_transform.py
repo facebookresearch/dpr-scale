@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-import random
-
 import hydra
+import numpy as np
 import torch
 import torch.nn as nn
 import ujson  # @manual=third-party//ultrajson:ultrajson
 from dpr_scale.transforms.hf_transform import HFTransform
 from dpr_scale.utils.utils import maybe_add_title
-
+from typing import Optional
 
 class DPRTransform(nn.Module):
     def __init__(
@@ -16,12 +15,15 @@ class DPRTransform(nn.Module):
         text_transform,
         num_positive: int = 1,  # currently, like the original paper only 1 is supported
         num_negative: int = 7,
-        neg_ctx_sample: bool = True, # sample from negative list
-        pos_ctx_sample: bool = False, # sample from positives list
+        neg_ctx_sample: bool = True,  # sample from negative list
+        pos_ctx_sample: bool = False,  # sample from positives list
         num_val_negative: int = 7,  # num negatives to use in validation
-        num_test_negative = None,  # defaults to num_val_negative
+        num_test_negative=None,  # defaults to num_val_negative
         use_title: bool = False,  # use the title for context passages
         sep_token: str = " ",  # sep token between title and passage
+        rel_sample: bool = False,  # Use relevance scores to sample ctxs
+        corpus: Optional[torch.utils.data.Dataset] = None, # type: MemoryMappedDataset (inherited from torch.utils.data.Dataset) from dpr_scale.datamodule.dpr. 
+        # if corpus is None, we assume the training data includes passage text
         text_column: str = "text",  # for onbox
     ):
         super().__init__()
@@ -46,6 +48,8 @@ class DPRTransform(nn.Module):
         if isinstance(self.text_transform, HFTransform):
             self.sep_token = self.text_transform.sep_token
         self.text_column = text_column
+        self.rel_sample = rel_sample
+        self.corpus = corpus
 
     def _transform(self, texts):
         if not isinstance(self.text_transform, HFTransform):
@@ -65,6 +69,7 @@ class DPRTransform(nn.Module):
         all_ctxs = []
         positive_ctx_indices = []
         ctx_mask = []
+        scores = []
         rows = batch if type(batch) is list else batch[self.text_column]
         for row in rows:
             row = ujson.loads(row)
@@ -85,16 +90,22 @@ class DPRTransform(nn.Module):
 
             # Handle case when context is a list of tokens instead of string.
             try:
-                if len(contexts_pos) > 0:
+                if len(contexts_pos) > 0 and self.corpus is None:
                     assert isinstance(contexts_pos[0]["text"], str)
             except AssertionError:
                 for c in contexts_pos:
                     c["text"] = " ".join(c["text"])
 
             if stage == "train" and self.pos_ctx_sample:
-                contexts_pos = random.sample(
-                    contexts_pos, min(len(contexts_pos), self.num_positive)
-                )
+                rel = [
+                    ctx.get("relevance", 1.0) if self.rel_sample else 1.0
+                    for ctx in contexts_pos
+                ]
+                # normalize rel to a probability.
+                proba = [float(r) / sum(rel) for r in rel]
+                contexts_pos = np.random.choice(
+                    contexts_pos, self.num_positive, replace=False, p=proba
+                ).tolist()
             else:
                 contexts_pos = contexts_pos[: self.num_positive]
 
@@ -113,7 +124,15 @@ class DPRTransform(nn.Module):
                     and self.neg_ctx_sample
                     and len(contexts_neg) > num_neg_sample
                 ):
-                    contexts_neg = random.sample(contexts_neg, num_neg_sample)
+                    rel = [
+                        ctx.get("relevance", 1.0) if self.rel_sample else 1.0
+                        for ctx in contexts_neg
+                    ]
+                    # normalize rel to a probability.
+                    proba = [float(r) / sum(rel) for r in rel]
+                    contexts_neg = np.random.choice(
+                        contexts_neg, num_neg_sample, replace=False, p=proba
+                    ).tolist()
                 else:
                     contexts_neg = contexts_neg[:num_neg_sample]
             else:
@@ -124,27 +143,46 @@ class DPRTransform(nn.Module):
             mask = [0] * len(ctxs)
             if len(contexts_neg) < num_neg_sample:
                 # add dummy ctxs
-                ctxs.extend(
-                    [{"text": "0", "title": "0"}] * (num_neg_sample - len(contexts_neg))
-                )
-                mask.extend([1] * (num_neg_sample - len(contexts_neg)))
+                if self.corpus is None:
+                    ctxs.extend(
+                        [{"text": "0", "title": "0", "score": 0}]
+                        * (num_neg_sample - len(contexts_neg))
+                    )
+                else:
+                    ctxs.extend(
+                        [{"docidx": "0", "score": 0}]
+                        * (num_neg_sample - len(contexts_neg))
+                    )
 
+                mask.extend([1] * (num_neg_sample - len(contexts_neg)))
+            # make sure all rows have same context count
+            assert len(ctxs) == (
+                self.num_positive + num_neg_sample
+            ), f"Row has improper ctx count. Check positive ctxs in: {row}"
+            # teacher's retrieval score for distillation
+            scores.append([float(x["score"]) if "score" in x else 0 for x in ctxs])
             current_ctxs_len = len(all_ctxs)
             all_ctxs.extend(ctxs)
             positive_ctx_indices.append(current_ctxs_len)
             questions.append(row["question"])
             ctx_mask.extend(mask)
 
-        ctx_text = [
-            maybe_add_title(x["text"], x["title"], self.use_title, self.sep_token)
-            for x in all_ctxs
-        ]
+        ctx_text = []
+        for x in all_ctxs: 
+            if self.corpus is None: #if corpus is not included, we may get text directly from train json file
+                ctx_text.append(maybe_add_title(x["text"], x["title"], self.use_title, self.sep_token))
+            else:
+                docid, text, title = self.corpus[int(x['docidx'])].decode('UTF-8').strip().split('\t')
+                text = maybe_add_title(text, title, self.use_title, self.sep_token)
+                ctx_text.append(text)
+
         question_tensors = self._transform(questions)
         ctx_tensors = self._transform(ctx_text)
         return {
             "query_ids": question_tensors,
             "contexts_ids": ctx_tensors,
             "pos_ctx_indices": torch.tensor(positive_ctx_indices, dtype=torch.long),
+            "scores": torch.tensor(scores, dtype=torch.float32),
             "ctx_mask": torch.tensor(ctx_mask, dtype=torch.bool),
         }
 
@@ -158,11 +196,12 @@ class DPRCrossAttentionTransform(DPRTransform):
         neg_ctx_sample: bool = True,
         pos_ctx_sample: bool = False,
         num_val_negative: int = 7,  # num negatives to use in validation
-        num_test_negative = None,  # defaults to num_val_negative
+        num_test_negative: int = None,  # defaults to num_val_negative
         use_title: bool = False,  # Not supported for now
         sep_token: str = " ",  # sep token between question and passage
         text_column: str = "text",  # for onbox
         num_random_negs: int = 0,
+        rel_sample: bool = False,  # Not supported for now
     ):
         super().__init__(
             text_transform,
@@ -174,6 +213,7 @@ class DPRCrossAttentionTransform(DPRTransform):
             num_test_negative,
             use_title,
             sep_token,
+            rel_sample,
             text_column,
         )
         self.num_random_negs = num_random_negs
@@ -218,9 +258,15 @@ class DPRCrossAttentionTransform(DPRTransform):
                     c["text"] = " ".join(c["text"])
 
             if stage == "train" and self.pos_ctx_sample:
-                contexts_pos = random.sample(
-                    contexts_pos, min(len(contexts_pos), self.num_positive)
-                )
+                rel = [
+                    ctx.get("relevance", 1.0) if self.rel_sample else 1.0
+                    for ctx in contexts_pos
+                ]
+                # normalize rel to a probability.
+                proba = [float(r) / sum(rel) for r in rel]
+                contexts_neg = np.random.choice(
+                    contexts_pos, self.num_positive, replace=False, p=proba
+                ).tolist()
             else:
                 contexts_pos = contexts_pos[: self.num_positive]
 
@@ -241,7 +287,15 @@ class DPRCrossAttentionTransform(DPRTransform):
                     and self.neg_ctx_sample
                     and len(contexts_neg) > num_neg_sample
                 ):
-                    contexts_neg = random.sample(contexts_neg, num_neg_sample)
+                    rel = [
+                        ctx.get("relevance", 1.0) if self.rel_sample else 1.0
+                        for ctx in contexts_neg
+                    ]
+                    # normalize rel to a probability.
+                    proba = [float(r) / sum(rel) for r in rel]
+                    contexts_neg = np.random.choice(
+                        contexts_neg, num_neg_sample, replace=False, p=proba
+                    ).tolist()
                 else:
                     contexts_neg = contexts_neg[:num_neg_sample]
             else:
@@ -251,7 +305,11 @@ class DPRCrossAttentionTransform(DPRTransform):
             if len(contexts_neg) < num_neg_sample + num_random_negs:
                 # add dummy ctxs
                 ctxs.extend(
-                    random.sample(neg_candidates, (num_neg_sample + num_random_negs - len(contexts_neg)))
+                    np.random.choice(
+                        neg_candidates,
+                        (num_neg_sample + num_random_negs - len(contexts_neg)),
+                        replace=False,
+                    ).tolist()
                 )
             concat_ctxs = [
                 maybe_add_title(ctx["text"], row["question"], True, self.sep_token)
