@@ -35,11 +35,13 @@ conda create -n dpr-scale python=3.8
 conda activate dpr-scale
 ```
 Now let's install the packages. First, follow the instructions [here](https://pytorch.org/get-started/locally/) to install PyTorch on your machine.
+Pytorch 1.12.1 and CUDA 11.6 are used in our experiments.
+
 Then install faiss:
 ```
 conda install -c conda-forge faiss-gpu
 ```
-Finally install the packages in `requirement.txt`. Remember to comment out the packages in the .txt file that you've already installed to avoid conflicts. Also note that we use cuda 11.6 in all our experiments.
+Finally install the packages in `requirement.txt`. Remember to comment out the packages in the .txt file that you've already installed to avoid conflicts.
 ```
 pip install -r requirements.txt
 ```
