@@ -1,6 +1,5 @@
 hydra-core==1.1.0
 hydra-submitit-launcher==1.2.0
-torch==1.12.1
 torch-scatter==2.0.8
 pytorch-lightning==1.6.4
 fairscale==0.4.6
