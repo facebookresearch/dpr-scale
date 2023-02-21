@@ -21,11 +21,11 @@ In the following, we describe how to train, encode and retrieve with DRAGON on M
 
 Model | Initialization | MARCO Dev | BEIR | CKPT Download | Huggingface Path: Query Encoder | Huggingface Path: Context Encoder 
 |---|---|---|---|---|---|---
-DRAGON+ | [RetroMAE](https://huggingface.co/Shitao/RetroMAE) | 39.0 | 47.4 | to be released | [facebook/dragon-plus-query-encoder](https://huggingface.co/facebook/dragon-plus-query-encoder) | [facebook/dragon-plus-context-encoder](https://huggingface.co/facebook/dragon-plus-context-encoder)
-DRAGON-RoBERTa | [RoBERTa-base](https://huggingface.co/roberta-base) | 39.4 | 47.2  | to be released | [facebook/dragon-roberta-query-encoder](https://huggingface.co/facebook/dragon-roberta-query-encoder) | [facebook/dragon-roberta-context-encoder](https://huggingface.co/facebook/dragon-roberta-context-encoder)
-DRAGON | [BERT-base](https://huggingface.co/bert-base-uncased) | 39.3 | 46.6 | to be released | - | -
-DRAGON-S | [BERT-base](https://huggingface.co/bert-base-uncased) | 38.1 | 46.8 | to be released | - | -
-DRAGON-Q | [BERT-base](https://huggingface.co/bert-base-uncased) | 39.1 | 45.8 | to be released | - | -
+DRAGON+ | [RetroMAE](https://huggingface.co/Shitao/RetroMAE) | 39.0 | 47.4 | [Download](https://dl.fbaipublicfiles.com/dragon/checkpoints/DRAGON-Plus/checkpoint_best.ckpt) | [facebook/dragon-plus-query-encoder](https://huggingface.co/facebook/dragon-plus-query-encoder) | [facebook/dragon-plus-context-encoder](https://huggingface.co/facebook/dragon-plus-context-encoder)
+DRAGON-RoBERTa | [RoBERTa-base](https://huggingface.co/roberta-base) | 39.4 | 47.2  | [Download](https://dl.fbaipublicfiles.com/dragon/checkpoints/DRAGON-RoBERTa/checkpoint_best.ckpt) | [facebook/dragon-roberta-query-encoder](https://huggingface.co/facebook/dragon-roberta-query-encoder) | [facebook/dragon-roberta-context-encoder](https://huggingface.co/facebook/dragon-roberta-context-encoder)
+DRAGON | [BERT-base](https://huggingface.co/bert-base-uncased) | 39.3 | 46.6 | [Download](https://dl.fbaipublicfiles.com/dragon/checkpoints/DRAGON/checkpoint_best.ckpt) | - | -
+DRAGON-S | [BERT-base](https://huggingface.co/bert-base-uncased) | 38.1 | 46.8 | [Download](https://dl.fbaipublicfiles.com/dragon/checkpoints/DRAGON-S/checkpoint_best.ckpt) | - | -
+DRAGON-Q | [BERT-base](https://huggingface.co/bert-base-uncased) | 39.1 | 45.8 | [Download](https://dl.fbaipublicfiles.com/dragon/checkpoints/DRAGON-Q/checkpoint_best.ckpt) | - | -
 
 ## Dependencies <a name="dependency"></a>
 First, make sure you have [Anaconda3](https://docs.anaconda.com/anaconda/install/index.html) installed.
