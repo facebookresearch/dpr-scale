@@ -208,7 +208,7 @@ PYTHONPATH=.:$PYTHONPATH python dpr_scale/run_retrieval_pytorch.py \
 ## DRAGON Evaluation on BEIR <a name="dragon_beir_eval"></a>
 We first download BEIR dataset from its [github](https://github.com/beir-cellar/beir). Here we use the nfcorpus dataset as an example.
 ### Data Preprocess
-We first download decompress the dataset; then, using our script to transform the corpus and query file into dpr-scale format. We also transform the `qrels.test.tsv` into trec qrel fromat. Note that when runing `dpr_scale/run_retrieval_pytorch.py` for `arguana` and `quora`, please turn on `--ignore_identical_ids`.
+We first download decompress the dataset; then, using our script to transform the corpus and query file into dpr-scale format. We also transform the `qrels.test.tsv` into trec qrel fromat. Note that when running `dpr_scale/run_retrieval_pytorch.py` for `arguana` and `quora`, please turn on `--ignore_identical_ids`.
 ```
 # data download and decompress
 mkdir $YOUR_BEIR_FOLDER
