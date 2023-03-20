@@ -71,8 +71,44 @@ task.transform.max_seq_len=128
 ```
 
 ## Data Augmentation for DRAGON Training <a name="msmarco_data_augmentation"></a>
+
+
+Our training data can be downloaded at:
+<table>
+  <tr>
+    <td> <b>Query Only</b> </td>
+    <td colspan="5" align="center"> <b>Training Data with Labels</b> </td>
+  </tr>
+  <tr>
+    <td></td>
+    <td><b>UniCOIL</b></td>
+    <td><b>Contriever</b></td>
+    <td><b>GTR-XXL</b></td>
+    <td><b>ColBERT-v2</b></td>
+    <td><b>SPLADE++</b></td>
+  </tr>  
+  <tr>
+    <td> <a href="https://dl.fbaipublicfiles.com/dragon/data/queries/queries.sentence.train.tsv">sentences</a> </td>
+    <td> <a href="https://dl.fbaipublicfiles.com/dragon/data/labels/uniCOIL.sentence.train.jsonl">Download</a> </td>
+    <td> <a href="https://dl.fbaipublicfiles.com/dragon/data/labels/contriever-msmarco.sentence.train.jsonl">Download</a> </td>
+    <td> <a href="https://dl.fbaipublicfiles.com/dragon/data/labels/gtr-xxl.sentence.train.jsonl">Download</a> </td>
+    <td> <a href="https://dl.fbaipublicfiles.com/dragon/data/labels/colbertv2.sentence.train.jsonl">Download</a> </td>
+    <td> <a href="https://dl.fbaipublicfiles.com/dragon/data/labels/splade.sentence.train.jsonl">Download</a> </td>
+  </tr>
+  <tr>
+    <td> <a href="https://dl.fbaipublicfiles.com/dragon/data/queries/queries.doct5query.train.tsv">docT5query</a> </td>
+    <td> <a href="https://dl.fbaipublicfiles.com/dragon/data/labels/uniCOIL.doct5query.train.jsonl">Download</a> </td>
+    <td> <a href="https://dl.fbaipublicfiles.com/dragon/data/labels/contriever-msmarco.doct5query.train.jsonl">Download</a> </td>
+    <td> <a href="https://dl.fbaipublicfiles.com/dragon/data/labels/gtr-xxl.doct5query.train.jsonl">Download</a> </td>
+    <td> <a href="https://dl.fbaipublicfiles.com/dragon/data/labels/colbertv2.doct5query.train.jsonl">Download</a> </td>
+    <td> <a href="https://dl.fbaipublicfiles.com/dragon/data/labels/splade.doct5query.train.jsonl">Download</a> </td>
+  </tr>
+</table>
+
+Below we describe how the training data is generated.
+
 ### MSMARCO Query Augmentation <a name="msmarco_qry_augmentation"></a>
-However, in this project, we scale up the size of training data using augmented queries from sentence cropping and synthetic queries. For sentence cropping, we use the below script to crop sentences from msmarco passage corpus, resulting in 28,545,938 queries.
+In this project, we scale up the size of training data using augmented queries from sentence cropping and synthetic queries. For sentence cropping, we use the following script to crop sentences from msmarco passage corpus, resulting in 28,545,938 queries.
 ```
 PYTHONPATH=. python dragon/data_prep/crop_sentence.py --workers 16 --doc_path $YOUR_MSMRCO_FOLDER/collection.tsv --output_dir_path $YOUR_MSMRCO_FOLDER/queries.sentence.train.tsv
 ```
