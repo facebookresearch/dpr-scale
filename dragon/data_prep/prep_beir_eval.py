@@ -27,8 +27,8 @@ def json_to_tsv(
 
                 text_list = []
                 for item in meta_list:
-                    if item == "text":
-                        content[item] = ' '.join(content[item].split()) # avoid '\t' and '\n' in text to impact file reader
+                    if item == "text" or item == "title":
+                        content[item] = ' '.join(content[item].split()) # avoid '\t' and '\n' in text and title to impact file reader
                     text_list.append(content[item])
                 fout.write('\t'.join(text_list) + '\n')
 
