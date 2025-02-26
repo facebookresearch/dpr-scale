@@ -9,6 +9,8 @@ Scalable implementation of dense retrieval.
     - https://github.com/facebookresearch/dpr-scale/tree/citadel
 - [How to Train Your DRAGON: Diverse Augmentation Towards Generalizable Dense Retrieval](https://arxiv.org/abs/2302.07452)
     - https://github.com/facebookresearch/dpr-scale/tree/main/dragon
+- [DRAMA: Diverse Augmentation from Large Language Models to Smaller Dense Retrievers](https://arxiv.org/abs/2502.18460)
+    - https://github.com/facebookresearch/dpr-scale/tree/main/drama
 
 
 ## Input Data Format (JSONL)
