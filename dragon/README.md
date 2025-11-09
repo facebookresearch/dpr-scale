@@ -113,7 +113,7 @@ In this project, we scale up the size of training data using augmented queries f
 PYTHONPATH=. python dragon/data_prep/crop_sentence.py --workers 16 --doc_path $YOUR_MSMRCO_FOLDER/collection.tsv --output_dir_path $YOUR_MSMRCO_FOLDER/queries.sentence.train.tsv
 ```
 
-For synthetic queries, we directly get the [doct5query](https://github.com/castorini/docTTTTTquery) generated queries from the [link](https://www.dropbox.com/s/uzkvv4gpj3a596a/predicted_queries_topk_sampling.zip?dl=1). Note that we randomly sample 28,545,938 sythetic quereis from the pool and form the query file `queries.doct5query.train.tsv` with the format `{qid}\t{query_text}` by assigning dummy `qid` (start from 0) for each query.
+For synthetic queries, we directly get the [doct5query](https://github.com/castorini/docTTTTTquery) generated queries from the [link](https://www.dropbox.com/s/uzkvv4gpj3a596a/predicted_queries_topk_sampling.zip?dl=1). Note that we randomly sample 28,545,938 sythetic queries from the pool and form the query file `queries.doct5query.train.tsv` with the format `{qid}\t{query_text}` by assigning dummy `qid` (start from 0) for each query.
 
 ### MSMARCO Relevance Label Augmentation <a name="msmarco_label_augmentation"></a>
 Here, we use contriever to conduct relevance label augmentation on the sentence queries just created (`$YOUR_MSMRCO_FOLDER/queries.sentence.train.tsv`) and generate the training data as an example. Note that to speed up the process, you may want to split the query file into segments and generate the query embeddings and conduct retrieval using multiple GPUs; then merge the results.
