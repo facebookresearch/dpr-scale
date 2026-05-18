@@ -1,7 +1,7 @@
 hydra-core==1.1.0
 hydra-submitit-launcher==1.2.0
 torch-scatter==2.0.8
-pytorch-lightning==1.6.4
+pytorch-lightning==2.6.1
 fairscale==0.4.6
 transformers==3.4.0
 sentence_splitter>=1.4
